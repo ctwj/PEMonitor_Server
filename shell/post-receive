@@ -1,0 +1,51 @@
+# Received branch will be checked against this. Only deploy when receiving this branch.
+DEPLOY_BRANCH="master"
+
+# This is the root deploy dir.
+DEPLOY_ROOT="/www"
+
+# This will be 'eval'ed after git checkout -f step.
+###########################################################################################
+
+export GIT_DIR="$(cd $(dirname $(dirname $0));pwd)"
+export PROJECT_NAME="${GIT_DIR##*/}"
+export DEPLOY_TO="${DEPLOY_ROOT}/${PROJECT_NAME}"
+export GIT_WORK_TREE="${DEPLOY_TO}"
+
+IP="$(ip addr show eth0 | grep 'inet ' | cut -f2 | awk '{ print $2}')"
+
+echo "--------HOSTNAME: '${HOSTNAME}' IP: ${IP} --------"
+echo
+
+# Make sure directory exists. Maybe its deployed for the first time.
+mkdir -p "${DEPLOY_TO}"
+
+# Loop, because it is possible to push more than one branch at a time. (git push --all)
+while read oldrev newrev refname
+do
+    branch=$(git rev-parse --symbolic --abbrev-ref $refname)
+
+    if [ "${DEPLOY_BRANCH}" == "$branch" ]; then
+        # Make sure GIT_DIR and GIT_WORK_TREE is correctly set and 'export'ed. Otherwhise
+        # these two environment variables could also be passed as parameters to the git cli
+
+        echo "githook: 部署工程 '${PROJECT_NAME}' 的 '${DEPLOY_BRANCH}' 分支到路径 '${DEPLOY_TO}'"
+        git checkout -f
+
+        echo
+        echo "githook: 执行钩子脚本 HOOK_CMD"
+        if [ -e "${DEPLOY_TO}/logs/nginx.pid" ]; then
+            echo "openresty is running --> reloading openresty";
+            /usr/bin/systemctl reload openresty.service
+            echo "--> openresty reloaded";
+        else
+            echo "openresty is not running --> starting openresty";
+            /usr/bin/systemctl start openresty.service
+            echo "--> openresty started";
+        fi;
+    fi
+done
+
+echo
+echo "-------- 执行完毕 --------"
+exit 0

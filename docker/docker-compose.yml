@@ -1,0 +1,57 @@
+version: '3.1'
+
+services:
+    mongo_server:
+        image: mongo
+        container_name: mongo
+        restart: always
+        ports:
+            - "27017:27017"
+        # environment:
+        # MONGO_INITDB_ROOT_USERNAME: root
+        # MONGO_INITDB_ROOT_PASSWORD: example
+
+    mysql_server:
+        image: mysql
+        container_name: mysql
+        restart: always
+        environment:
+            - MYSQL_ROOT_PASSWORD=pemonitor
+            - MYSQL_DATABASE=pemonitor
+        volumes:
+            - ./data/mysql:/var/lib/mysql
+        expose:
+            - "3306"
+        ports:
+            - "3306:3306"
+
+    beanstalkd_server:
+        image: schickling/beanstalkd
+        container_name: beanstalkd
+        expose:
+            - "11300"
+        ports:
+            - "11300:11300"
+
+    api_server:
+        image: urbit/lumen-nginx
+        container_name: lumen
+        links:
+            - beanstalkd_server:beanstalkd_server
+            - mongo_server:mongo_server
+            - mysql_server:mysql_server
+        ports:
+            - "80:8080"
+
+    openresty_server:
+        image: openresty/openresty:alpine
+        container_name: openresty
+        links:
+            - beanstalkd_server:beanstalkd_server
+            - mongo_server:mongo_server
+            - mysql_server:mysql_server
+            - api_server:api_server
+        ports:
+            - "80:88"
+        volumes:
+            - ./openresty/conf.d:/etc/nginx/conf.d
